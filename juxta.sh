@@ -111,6 +111,13 @@ popd > /dev/null
 : ${IMAGE_SORT:="none"}
 # If true, image sort is skipped if a matching sorted dat-file already exists
 : ${SKIP_IMAGE_SORT:=false}
+# If defined and IMAGE_SORT==true, the images listed in the given file will be used to
+# determine the order, instead of the images displayed in the collage. The two image lists
+# must contain the same imagenames (in different folders) and the imagenames must be
+# unique within each folder.
+# This feature is typically used with similarity-sort to provide normalised versions, such
+# as greyscaled or cropped, which sometimes works better for similarity.
+: ${IMAGE_SORT_SOURCE:=""}
 # If true and IMAGE_SORT==similarity, a mini collage of the image positioned by normalised
 # t-SNE coordinates is created. Mostly used to check how well RasterFairy positioned the
 # images on the main collage.
@@ -130,6 +137,12 @@ popd > /dev/null
 : ${ASYNC_META_SIDE:=50}
 # The number of meta-data-chunks to keep cached in the browser.
 : ${ASYNC_META_CACHE:=10}
+# Alias for ASYNC_META_SIDE=<veryhighnumber>
+# Effectively forces the metadata to be fully held in browser memory, thereby making it
+# possible to search.
+# Warning: If the amount of metadata is large (and/or there are many images, where "many"
+# is 100.000+), this might be too heavy for the browser.
+: ${FORCE_SEARCH:="false"}
 
 # If 'dzi', image tiles are stored in folders fully compatible with DZI, directly usable
 # OpenSeadragon and similar. This is highly recommended as long as the number of tiles
@@ -706,14 +719,91 @@ resolve_dimensions() {
     export RAW_IMAGE_ROWS;
 }
 
+#
+# Splits the given imagelist infor tabulated format:
+# sequence_number path image path/image |metadata
+tabify_imagelist() {
+    local IN="$1"
+    COUNTER=0
+    while read -r LINE; do
+        if [[ "." == ".$LINE" ]]; then
+            continue
+        fi
+        
+        if [[ "$LINE" =~ ^([^|]*)[|](.*)$ ]]; then
+            local PATHFILE="${BASH_REMATCH[1]}"
+            local META="${BASH_REMATCH[2]}"
+        else
+            local PATHFILE="$LINE"
+            local META=""
+        fi
+        
+        if [[ "$PATHFILE" =~ ^(.*/)([^/]*)$ ]]; then
+            local FPATH="${BASH_REMATCH[1]}"
+            local FNAME="${BASH_REMATCH[2]}"
+        else
+            local FPATH=""
+            local FNAME="$PATHFILE"
+        fi
+        
+        echo "$COUNTER"$'\t'"$FPATH"$'\t'"$FNAME"$'\t'"$PATHFILE"$'\t'"$META"
+
+        COUNTER=$(( COUNTER+1 ))
+    done < "$IN"
+}
+
+# Takes an ordered file and applies the order to the second file, keeping paths and metadata
+# unchanged in the second file.
+apply_order() {
+    local ORDER_FILE="$1"
+    local IMAGE_FILE="$2"
+
+    local S=$(mktemp)
+    local D=$(mktemp)
+    local DS=$(mktemp)
+
+    tabify_imagelist "$ORDER_FILE" | LC_ALL=c sort -t $'\t' -k3,3 > "$S"
+    tabify_imagelist "$IMAGE_FILE" | LC_ALL=c sort -t $'\t' -k3,3 > "$D"
+    # sequence_number path image path/image |metadata
+    LC_ALL=c join -t $'\t' -j 3 -o 1.1,2.2,2.3,2.5 "$S" "$D" > "$DS"
+
+    # Only write a |-devider if metadata are present
+    LC_ALL=c sort -n < "$DS" | sed -e 's/^\([^\t]*\)\t\([^\t]*\)\t\([^\t]*\)\t\([^\t]\+\)$/\2\3|\4/' -e 's/^\([^\t]*\)\t\([^\t]*\)\t\([^\t]*\)\t$/\2\3/'
+    
+    rm "$S" "$D" "$DS"
+}
+
+get_order_subset() {
+    local IMAGE_FILE="$1"
+    local ORDER_FILE="$2"
+
+    local I=$(mktemp)
+    local O=$(mktemp)
+    local IO=$(mktemp)
+
+    tabify_imagelist "$IMAGE_FILE" | LC_ALL=c sort -t $'\t' -k3,3 > "$I"
+    tabify_imagelist "$ORDER_FILE" | LC_ALL=c sort -t $'\t' -k3,3 > "$O"
+    # sequence_number path image path/image |metadata
+    LC_ALL=c join -t $'\t' -j 3 -o 2.4 "$I" "$O" > "$IO"
+    if [[ $(wc -l < "$IO") -ne $(wc -l < "$IMAGE_FILE") ]]; then
+        >&2 echo "Error: Using IMAGE_SORT_SOURCE=$IMAGE_SORT_SOURCE resulted in $(wc -l < "$IO") images instead of $(wc -l "$IMAGE_FILE"). Offending file is $IO"
+        rm "$I" "$O"
+        usage 68
+    fi
+    cat "$IO"
+    rm "$I" "$O" "$IO"
+}
+        
 # If IMAGE_SORT is defined, re-ordering of the image list is activated
 # Valid values are 'none', 'intensity', 'rainbow' and 'similarity'
 sort_if_needed() {
     if [[ "none" == "$IMAGE_SORT" ]]; then
         return
     fi
-    echo " - Sorting images by $IMAGE_SORT"
+    echo "  - Sorting images by $IMAGE_SORT"
     local SORT_DAT="$DEST/imagelist_sorted_${IMAGE_SORT}.dat"
+
+    # Check if already sorted
     if [[ -s "$SORT_DAT" ]]; then
         if [[ "true" == "$SKIP_IMAGE_SORT" ]]; then
             if [[ $(wc -l < "$DEST/image_list.dat") -eq $(wc -l "$SORT_DAT") ]]; then
@@ -729,12 +819,23 @@ sort_if_needed() {
             rm "$SORT_DAT"
         fi
     fi
+
+    # Check if the sort should be done on alternative versions of the images
+    local CONCRETE_SORT_SOURCE="$DEST/imagelist.dat"
+    local TMP_ALT_SOURCE=$(mktemp)
+    if [[ ! -z "$IMAGE_SORT_SOURCE" ]]; then
+        echo "   - Using $IMAGE_SORT_SOURCE for sorting"
+        get_order_subset "$DEST/imagelist.dat" "$IMAGE_SORT_SOURCE" > "$TMP_ALT_SOURCE"
+        CONCRETE_SORT_SOURCE="$TMP_ALT_SOURCE"
+    fi
+
+    # Perform the sort
     if [[ "intensity" == "$IMAGE_SORT" ]]; then
-        ${JUXTA_HOME}/intensity_sort.sh "$DEST/imagelist.dat" "$SORT_DAT"
+        ${JUXTA_HOME}/intensity_sort.sh "$CONCRETE_SORT_SOURCE" "$SORT_DAT"
     elif [[ "rainbow" == "$IMAGE_SORT" ]]; then
-        ${JUXTA_HOME}/rainbow_sort.sh "$DEST/imagelist.dat" "$SORT_DAT"
+        ${JUXTA_HOME}/rainbow_sort.sh "$CONCRETE_SORT_SOURCE" "$SORT_DAT"
     elif [[ "similarity" == "$IMAGE_SORT" ]]; then
-        GENERATE_TSNE_PREVIEW_IMAGE=${GENERATE_TSNE_PREVIEW_IMAGE} RAW_IMAGE_COLS=$RAW_IMAGE_COLS RAW_IMAGE_ROWS=$RAW_IMAGE_ROWS PCA_COMPONENTS=${PCA_COMPONENTS} ${JUXTA_HOME}/tensorflow_sort.sh "$DEST/imagelist.dat" "$SORT_DAT"
+        GENERATE_TSNE_PREVIEW_IMAGE=${GENERATE_TSNE_PREVIEW_IMAGE} RAW_IMAGE_COLS=$RAW_IMAGE_COLS RAW_IMAGE_ROWS=$RAW_IMAGE_ROWS PCA_COMPONENTS=${PCA_COMPONENTS} ${JUXTA_HOME}/tensorflow_sort.sh "$CONCRETE_SORT_SOURCE" "$SORT_DAT"
     else
         >&2 echo "Error: Unknown IMAGE_SORT '$IMAGE_SORT'"
         usage 21
@@ -743,11 +844,26 @@ sort_if_needed() {
         >&2 echo "Error: $SORT_DAT not available. Sorting failed. Exiting"
         exit 34
     fi
+
+    # Apply the sort order to the display images if needed
+    if [[ ! -z "$IMAGE_SORT_SOURCE" ]]; then
+        local TMP_SORT=$(mktemp)
+        apply_order "$SORT_DAT" "$DEST/imagelist.dat" > "$TMP_SORT"
+        if [[ $(wc -l < "$TMP_SORT") -ne $(wc -l < "$DEST/imagelist.dat") ]]; then
+            >&2 echo "Error: Attempting to apply IMAGE_SORT_SOURCE=$IMAGE_SORT_SOURCE failed. Resulting sorted file content was"
+            >&2 cat "$TMP_SORT"
+            usage 70
+            rm "$TMP_SORT"
+        fi
+        mv "$TMP_SORT" "$SORT_DAT"
+    fi
+    rm "$TMP_ALT_SOURCE"
     echo "   - Overwriting $DEST/imagelist.dat with $IMAGE_SORT sorted $SORT_DAT"
     cp "$SORT_DAT" "$DEST/imagelist.dat"
 }
 
 usage() {
+    echo ""
     echo "Usage: ./juxta.sh imagelist [destination]"
     echo "imagelist: A file with images represented as file paths"
     echo "destination: Where to store the generated tiles"
@@ -822,7 +938,18 @@ sanitize_input() {
             usage 63
         fi
     done
-    
+
+    if [[ ! -z "$IMAGE_SORT_SOURCE" ]]; then
+        if [[ ! -s "$IMAGE_SORT_SOURCE" ]]; then
+            >&2 echo "Error: The file defined by IMAGE_SORT_SOURCE==$IMAGE_SORT_SOURCE does not exist"
+            usage 67
+        fi
+        if [[ "none" == "$IMAGE_SORT" ]]; then
+            >&2 echo "Error: IMAGE_SORT_SOURCE==$IMAGE_SORT_SOURCE is defined but IMAGE_SORT==none"
+            usage 69
+        fi
+    fi
+
     IMAGE_LIST="$1"
     echo " - Starting processing of $IMAGE_LIST into $DEST"
     if [[ "-r" == "$IMAGE_LIST" ]]; then
@@ -940,6 +1067,14 @@ sanitize_input() {
         fi
         rm $T
     fi
+    if [[ "true" == "$FORCE_SEARCH" ]]; then
+        echo "  - Setting ASYNC_META_SIDE=100000000 as FORCE_SEARCH==true"
+        if [[ "$ICOUNTER" -gt 100000 ]]; then
+            echo "    - WARNING: There are $ICOUNTER images. This might be too heavy for search in the browser"
+        fi
+        ASYNC_META_SIDE=100000000
+    fi
+    
     export FOLDER_LAYOUT
     export LIMIT_FOLDER_SIDE
 }
