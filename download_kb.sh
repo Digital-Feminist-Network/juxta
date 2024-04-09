@@ -126,10 +126,13 @@ download_image() {
     fi
 
     # Update mappings
-    if [ -s "${IMAGE_DEST}" ]; then
+    if [[ "$SKIP_DOWNLOAD" == "true" ]]; then
         echo "${IMAGE_DEST}|${LINK}§${TITLE}§${DESCRIPTION}§${COPYRIGHT}" >> "${DOWNLOAD_FOLDER}/$COLLECTION/sources.dat"
-    else
-        echo "$IMAGE_URL" >> "${DOWNLOAD_FOLDER}/$COLLECTION/sources_unavailable.dat"
+    else if [ ! -s "${IMAGE_DEST}" ]; then
+             echo "${IMAGE_DEST}|${LINK}§${TITLE}§${DESCRIPTION}§${COPYRIGHT}" >> "${DOWNLOAD_FOLDER}/$COLLECTION/sources.dat"
+         else
+             echo "$IMAGE_URL" >> "${DOWNLOAD_FOLDER}/$COLLECTION/sources_unavailable.dat"
+         fi
     fi
 }
 
