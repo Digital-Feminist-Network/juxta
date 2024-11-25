@@ -6,17 +6,15 @@ function createOverlay(juxtaProperties, dragon) {
     // TODO: Switch getElementById to class under a given div
     this.jprops = juxtaProperties;
     this.dragonbox = document.getElementById('zoom-display');
-    this.infobox = document.getElementById('infobox');
-    this.header = document.getElementById('header');
-    this.footer = document.getElementById('footer');
+    this.juxta_infobox = document.getElementById('juxta_infobox');
+    this.juxta_header = document.getElementById('juxta_header');
+    this.juxta_footer = document.getElementById('juxta_footer');
     this.imagePoint = 0;
     this.myDragon = dragon;
 
     this.metaCacheMax = 10;
     this.metaCache = [];
 
-    this.boxPanMarginFraction = 1/100;
-    
     // Connect overlay handling to the dragon
     if (myDragon.isOpen()) {
         attachToOpenDragon(juxtaProperties, myDragon);
@@ -44,20 +42,10 @@ function createOverlay(juxtaProperties, dragon) {
             element: myDragon.container,
             moveHandler: focusChanged
         });
-        myDragon.addHandler('animation', handleChangeEvent);
+        myDragon.addHandler('animation', handleChange);
         myDragon.addHandler('canvas-drag', focusChanged);
         myDragon.addHandler('canvas-click', focusChanged);
-        //myDragon.addHandler('canvas-key', juxtaKeyCallback);
-        //window.addEventListener("keydown", juxtaKeyCallback);
-        tracker.setTracking(true);
-        myDragon.addHandler('canvas-key', function (e) { 
-            juxtaKeyCallback(e.originalEvent);
-            //e.preventDefault = true; // disable default keyboard controls
-            // TODO: Allow WASD?
-            e.preventVerticalPan = true; // disable vertical panning with arrows and W or S keys
-            e.preventHorizontalPan = true; // disable horizontal panning with arrows and A or D keys
-        });
-        dragonbox.querySelector('.openseadragon-canvas').focus();
+        tracker.setTracking(true);  
     }
 
     this.rawToWeb = function(rawX, rawY) {
@@ -74,19 +62,18 @@ function createOverlay(juxtaProperties, dragon) {
         return Math.floor(imagePoint.y / jprops.tileSize / jprops.rawH);
     }
     
-    this.handleChange = function(rawX = currentImageGridX(), rawY = currentImageGridY()) {
+    this.handleChange = function() {
+        var rawX = currentImageGridX();
+        var rawY = currentImageGridY();
         roundWebPoint = rawToWeb(rawX, rawY);
         roundWebBRPoint = rawToWeb(rawX+1, rawY+1);
         roundWebBRPoint.x = roundWebBRPoint.x-1;
         roundWebBRPoint.y = roundWebBRPoint.y-1;
+        var zoom = myDragon.viewport.getZoom(true);
         juxtaExpand(rawX, rawY,
                     Math.floor(roundWebPoint.x), Math.floor(roundWebPoint.y),
                     Math.floor(roundWebBRPoint.x-roundWebPoint.x), Math.floor(roundWebBRPoint.y-roundWebPoint.y));
-    }
-    // Used for catching animation events, so result.x&y are not changed
-    this.handleChangeEvent = function() {
-        handleChange(result.x, result.y);
-    }
+    }                      
 
     // https://openseadragon.github.io/examples/viewport-coordinates/
     this.focusChanged = function(event) {
@@ -96,10 +83,10 @@ function createOverlay(juxtaProperties, dragon) {
         handleChange();
     }
 
-    this.createHeader = function(x, y, image, meta) {
+    this.createJuxtaHeader = function(x, y, image, meta) {
         return image == "" ? '(' + x + ', ' + y + ')' : image;
     }
-    this.createFooter = function(x, y, image, meta) {
+    this.createJuxtaFooter = function(x, y, image, meta) {
         return meta;
     }
 
@@ -109,7 +96,7 @@ function createOverlay(juxtaProperties, dragon) {
     this.showInfoBox = function(x, y, boxX, boxY, boxWidth, boxHeight, validPos, image, meta) {
         return validPos && "missing" != image;
     }
-    this.showFooter = function(x, y, image, meta) {
+    this.showJuxtaFooter = function(x, y, image, meta) {
         // No longer valid
         //return (typeof(juxtaMeta) != 'undefined');
         return meta != "";
@@ -124,183 +111,60 @@ function createOverlay(juxtaProperties, dragon) {
     // Called when the mouse is moved over a valid image
     this.juxtaCallback = function(x, y, boxX, boxY, boxWidth, boxHeight, validPos, image, meta) {
         beforeCallback(x, y, boxX, boxY, boxWidth, boxHeight, validPos, image, meta);
-        var sf = showFooter(x, y, image, meta);
+        var sf = showJuxtaFooter(x, y, image, meta);
         if (showInfoBox(x, y, boxX, boxY, boxWidth, boxHeight, validPos, image, meta)) {
-            infobox.style.visibility='visible';
+            juxta_infobox.style.visibility='visible';
 
-            infobox.style.left = boxX + 'px';
-            infobox.style.top = boxY + 'px';
-            infobox.style.width = boxWidth + 'px';
-            infobox.style.height = boxHeight + 'px';
+            juxta_infobox.style.left = boxX + 'px';
+            juxta_infobox.style.top = boxY + 'px';
+            juxta_infobox.style.width = boxWidth + 'px';
+            juxta_infobox.style.height = boxHeight + 'px';
 
-            header.style.width = (boxWidth-16) + 'px';
-            header.style.height = '1em';
-            header.innerHTML= createHeader(x, y, image, meta);
-            header.style.left = boxX + 'px';
-            header.style.top = (boxY-header.clientHeight) + 'px';
+            juxta_header.style.width = (boxWidth-16) + 'px';
+            juxta_header.style.height = '1em';
+            juxta_header.innerHTML= createJuxtaHeader(x, y, image, meta);
+            juxta_header.style.left = boxX + 'px';
+            juxta_header.style.top = (boxY-juxta_header.clientHeight) + 'px';
 
-            footer.style.left = boxX + 'px';
-            footer.style.top = (boxY+boxHeight) + 'px';
-            footer.style.width = (boxWidth-32) + 'px';
-            footer.innerHTML = createFooter(x, y, image, meta);
+            juxta_footer.style.left = boxX + 'px';
+            juxta_footer.style.top = (boxY+boxHeight) + 'px';
+            juxta_footer.style.width = (boxWidth-32) + 'px';
+            juxta_footer.innerHTML = createJuxtaFooter(x, y, image, meta);
             if (sf) {
-                infobox.style.borderBottom = 'none';
-                infobox.borderBottomLeftRadius = '0';
-                infobox.borderBottomRightRadius = '0';
+                juxta_infobox.style.borderBottom = 'none';
+                juxta_infobox.borderBottomLeftRadius = '0';
+                juxta_infobox.borderBottomRightRadius = '0';
             } else {
-                footer.style.visibility = 'hidden';
-                infobox.style.borderBottom = '3px solid red';
-                infobox.borderBottomLeftRadius = '10px';
-                infobox.borderBottomRightRadius = '10px';
+                juxta_footer.style.visibility = 'hidden';
+                juxta_infobox.style.borderBottom = '3px solid red';
+                juxta_infobox.borderBottomLeftRadius = '10px';
+                juxta_infobox.borderBottomRightRadius = '10px';
             }
             if ( !showFullInfo(boxWidth, boxHeight) ) {
-                //      header.style.pointerEvents = 'none';
-                header.style.visibility = 'hidden';
-                footer.style.visibility = 'hidden';
-                infobox.style.borderTop = '3px solid red';
-                infobox.style.borderBottom = '3px solid red';
+                //      juxta_header.style.pointerEvents = 'none';
+                juxta_header.style.visibility = 'hidden';
+                juxta_footer.style.visibility = 'hidden';
+                juxta_infobox.style.borderTop = '3px solid red';
+                juxta_infobox.style.borderBottom = '3px solid red';
             } else {
-                //      header.style.pointerEvents = 'auto';
-                header.style.visibility = 'visible';
+                //      juxta_header.style.pointerEvents = 'auto';
+                juxta_header.style.visibility = 'visible';
                 if (sf) {
-                    footer.style.visibility = 'visible';
+                    juxta_footer.style.visibility = 'visible';
                 }      
-                infobox.style.borderTop = 'none';
+                juxta_infobox.style.borderTop = 'none';
                 if (sf) {  
-                    infobox.style.borderBottom = 'none';
+                    juxta_infobox.style.borderBottom = 'none';
                 }  
             }
         } else {
-            infobox.style.visibility='hidden';
-            header.style.visibility='hidden';
-            footer.style.visibility='hidden';
+            juxta_infobox.style.visibility='hidden';
+            juxta_header.style.visibility='hidden';
+            juxta_footer.style.visibility='hidden';
         }
         afterCallback(x, y, boxX, boxY, boxWidth, boxHeight, validPos, image, meta);
     };
 
-    this.fitView = function(images) {
-        console.log("Fitting view to hold at least " + images + " images");
-        var candidates = [];
-
-        for (var y = 1 ; y <= images ; y++) {
-            var x = Math.floor(images/y);
-            if (y*x < images) {
-                ++x;
-            }
-            candidates.push([x, y]);
-        }
-        var smallestVE = [Infinity, Infinity];
-        var smallestFraction = Infinity;
-
-        var visibleV = myDragon.viewport.getBounds();
-        var visibleVE = myDragon.viewport.viewportToViewerElementRectangle(visibleV);
-        for (var i = 0 ; i < candidates.length ; i++) {
-            var candidateBoxes = candidates[i];
-            var candidateVE = [candidateBoxes[0]*result.boxWidth, candidateBoxes[1]*result.boxHeight];
-            var candidateFraction = Math.max(candidateVE[0]/visibleVE.width, candidateVE[1]/visibleVE.height);
-            if (candidateFraction < smallestFraction) {
-                smallestVE = candidateVE;
-                smallestFraction = candidateFraction;
-            }
-        }
-        // Best box-layout found, adjusting view
-        var fittedVE = new OpenSeadragon.Rect(result.boxX, result.boxY, smallestVE[0], smallestVE[1]);
-        var fittedV = myDragon.viewport.viewerElementToViewportRectangle(fittedVE);
-        var hMarginV = visibleV.width*boxPanMarginFraction;
-        var vMarginV = visibleV.width*boxPanMarginFraction;
-        fittedV.x -= hMarginV;
-        fittedV.y -= vMarginV;
-        fittedV.width += 2*hMarginV;
-        fittedV.height += 2*vMarginV;
-//        console.log("Fitting from " + JSON.stringify(result));
-//        console.log("Fitting ve   " + JSON.stringify(fittedVE));
-//        console.log("Fitting v    " + JSON.stringify(fittedV));
-        myDragon.viewport.fitBounds(fittedV);
-     }
-    
-    // Called when a key is pressed
-    this.juxtaKeyCallback = function (e) {
-        var visibleV = myDragon.viewport.getBounds();
-        var visibleVE = myDragon.viewport.viewportToViewerElementRectangle(visibleV);
-        var hImages = Math.floor(visibleVE.width/result.boxWidth);
-        var vImages = Math.floor(visibleVE.height/result.boxHeight);
-
-        switch (e.keyCode) {
-        case 38: // up ###
-            if (e.ctrlKey) {
-                result.y = Math.max(result.y-vImages, 0);
-            } else {
-                if (result.y > 0) {
-                    result.y--;
-                }
-            }
-            updateResultFromKeyPress();
-            break;
-        case 40: // down
-            if (e.ctrlKey) {
-                result.y = Math.min(result.y+vImages, jprops.rowCount-1);
-            } else {
-                if (result.y < jprops.rowCount-1) {
-                    result.y++;
-                }
-            }
-            updateResultFromKeyPress();
-            break;
-        case 37: // left
-            if (e.ctrlKey) {
-                result.x = Math.max(result.x-hImages, 0);
-            } else {
-                if (result.x > 0 || result.y > 0) {
-                    result.x--;
-                }
-                if (result.x == -1) {
-                    result.x = jprops.colCount-1;
-                    result.y--;
-                }
-            }
-            updateResultFromKeyPress();
-            break;
-        case 39: // right
-            if (e.ctrlKey) {
-                result.x = Math.min(result.x+hImages, jprops.colCount-1);
-            } else {
-                if (result.x < jprops.colCount-1 || result.y < jprops.rowCount-1) {
-                    result.x++;
-                }
-                if (result.x == jprops.colCount) {
-                    result.x = 0;
-                    result.y++;
-                }
-            }
-            updateResultFromKeyPress();
-            break;
-        case 36: // home
-            result.x = 0;
-            result.y = 0;
-            updateResultFromKeyPress();
-            break;
-        }
-        if (e.keyCode >= 49 && e.keyCode <= 57) {
-            var requestedImages = e.keyCode-48;
-            if (e.ctrlKey) {
-                requestedImages = Math.pow(2, requestedImages);
-            }
-//            console.log("Before fit: " + JSON.stringify(result));
-            fitView(requestedImages);
-//            console.log("Before upd: " + JSON.stringify(result));
-            //updateResultFromKeyPress();
-//            console.log("After upd:  " + JSON.stringify(result));
-        }
-        
-        // TODO: preventDefault
-        // TODO: Handle unfilled bottom row
-        
-        // up=38, down=40, left=37, right=39
-        //console.log("boxX=" + result.x + "/" + jprops.colCount);
-//        console.log(e.keyCode);
-        //e.preventDefault = true;
-    }
-    
     this.result = {
         fired: true,
         x: 0, y: 0,
@@ -319,46 +183,6 @@ function createOverlay(juxtaProperties, dragon) {
                       result.validPos, result.image, result.meta);
     }
 
-    this.ensureSelectionIsVisible = function() {
-        var boxVE = new OpenSeadragon.Rect(result.boxX, result.boxY, result.boxWidth, result.boxHeight);
-        var boxV = myDragon.viewport.viewerElementToViewportRectangle(boxVE);
-        var deltaV = new OpenSeadragon.Point(0, 0);
-        var visibleV = myDragon.viewport.getBounds();
-        var changed = false;
-
-        var hMarginV = visibleV.width*boxPanMarginFraction;
-        if (boxV.x < visibleV.x) {
-            deltaV.x = boxV.x-visibleV.x-hMarginV;
-            changed = true;
-        } else if (boxV.x+boxV.width > visibleV.x+visibleV.width) {
-            deltaV.x = (boxV.x+boxV.width)-(visibleV.x+visibleV.width)+hMarginV;
-            changed = true;
-        }
-        
-        var vMarginV = visibleV.height*boxPanMarginFraction;
-        if (boxV.y < visibleV.y) {
-            deltaV.y = boxV.y-visibleV.y-vMarginV;
-            changed = true;
-        } else if (boxV.y+boxV.height > visibleV.y+visibleV.height) {
-            deltaV.y = (boxV.y+boxV.height)-(visibleV.y+visibleV.height)+vMarginV;
-            changed = true;
-        }
-        
-        if (changed) {
-            myDragon.viewport.panBy(deltaV, false);
-        }
-        return changed;
-    }
-    
-    // x & y are valid, fake the rest
-    updateResultFromKeyPress = function() {
-        handleChange(result.x, result.y);
-        if (ensureSelectionIsVisible()) {
-            //console.log("Enforcing visibility changed view. Updating box position with (" + result.x + ", " + result.y + ")");
-            handleChange(result.x, result.y);
-        }
-    }
-    
     // Returns false if a new request must be started
     this.tryFire = function() {
         if (result.fired) {

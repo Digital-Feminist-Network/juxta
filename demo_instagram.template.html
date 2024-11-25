@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${TOTAL_IMAGES} images</title>
+    <link rel="stylesheet" type="text/css" href="resources/juxta.css" />
+    <script src="resources/openseadragon.min.js"></script>
+    <script type="text/javascript" src="resources/overlays_preload.js"></script>
+    <script type="text/javascript" src="resources/overlays.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+  </head>
+  <body>
+    <main role="main">
+    <section class="jumbotron text-center" style="padding: 0.75rem 2rem;">
+        <div class="container">
+          <h1 class="jumbotron-heading">
+            <strong>${TOTAL_IMAGES} images</strong>
+          </h1>
+          <p class="lead text-muted"></p>
+          <p class="lead text-muted"></p>
+        </div>
+      </section>
+      <div class="container">
+        <div id="zoom-display" class="openseadragon">
+          <div id="juxta_header"></div>
+          <div id="juxta_infobox"></div>
+          <div id="juxta_footer"></div>
+          <script type="text/javascript">
+            var myDragon = OpenSeadragon({
+              id: "zoom-display",
+              maxZoomPixelRatio: ${MAX_ZOOM_PIXEL_RATIO},
+              zoomPerScroll: 2.0,
+              showNavigator:  false,
+              wrapHorizontal: false,
+              prefixUrl: "resources/images/",
+              ${TILE_SOURCES}
+            });
+            ${SETUP_OVERLAY}
+          </script>
+          <script type="text/javascript">
+          overlays.showJuxtaFooter = function(x, y, image, meta) {
+            return false;
+          }
+          overlays.createJuxtaHeader = function(x, y, image, meta) {
+            instagramURL = meta.split(" ")[0];
+            timestamp = meta.split(" ")[1].replace("T", " ");
+            return '<a href="' + instagramURL + '" target="_blank">' + timestamp + '</a>';
+          }
+          </script>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <div class="container text-center">
+        <div class="card-body">
+          <p class="lead">Generated `date +"%Y-%m-%d %H:%M"`</p>
+          <p class="lead text-muted">Created with <a href="https://github.com/tokee/juxta" target="_blank">juxta</a></p>
+          <p class="lead text-muted">This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.</p>
+          <p class="lead text-muted"><a href="https://digfemnet.org/" target="_blank">Digital Feminist Network</a></p>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
